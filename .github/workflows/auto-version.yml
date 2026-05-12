@@ -1,4 +1,4 @@
-name: Auto Version Bump
+name: Smart Multi-Project Version Bump
 
 on:
   pull_request:
@@ -14,43 +14,60 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # 히스토리 전체를 가져와야 변경된 파일을 찾을 수 있음
 
-      - name: Calculate New Version
-        id: versioning
+      - name: Detect Changed Projects and Update
         run: |
-          # 1. 기존 버전 추출 (AssemblyInfo.cs에서)
-          FILE_PATH="./ALT_LumiPro/Properties/AssemblyInfo.cs"
-          OLD_VERSION=$(grep 'AssemblyVersion' $FILE_PATH | cut -d '"' -f 2)
-          IFS='.' read -r -a V <<< "$OLD_VERSION"
+          # 1. 이번 머지에서 변경된 파일 목록 가져오기
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
           
-          # 2. 커밋 메시지에서 키워드 확인 (PR 제목이나 메시지 기준)
+          # *****************2. 업데이트할 프로젝트 목록 정의 (프로젝트 목록과 정확히 일치해야합니다!!!!!)**************************
+          PROJECTS=("A" "A.control")
+          
+          # 2. PR 제목에서 버전업 자릿수 키워드 추출
           MSG="${{ github.event.pull_request.title }}"
           
-          if [[ "$MSG" == *"#major"* ]]; then
-            V[0]=$((V[0] + 1)); V[1]=0; V[2]=0; V[3]=0
-          elif [[ "$MSG" == *"#minor"* ]]; then
-            V[1]=$((V[1] + 1)); V[2]=0; V[3]=0
-          elif [[ "$MSG" == *"#build"* ]]; then
-            V[2]=$((V[2] + 1)); V[3]=0
-          else
-            V[3]=$((V[3] + 1)) # 기본값은 수정 버전 증가
-          fi
-          
-          NEW_VERSION="${V[0]}.${V[1]}.${V[2]}.${V[3]}"
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          echo "OLD_VERSION=$OLD_VERSION" >> $GITHUB_ENV
+          for PROJECT in "${PROJECTS[@]}"; do
+            # 해당 프로젝트 폴더 내에 변경사항이 있는지 확인
+            if echo "$CHANGED_FILES" | grep -q "^$PROJECT/"; then
+              echo "Detect change in $PROJECT. Bumping version..."
+              
+              FILE_PATH="./$PROJECT/Properties/AssemblyInfo.cs"
+              if [ ! -f "$FILE_PATH" ]; then continue; fi
 
-      - name: Update AssemblyInfo.cs
-        run: |
-          FILE_PATH="./ALT_LumiPro/Properties/AssemblyInfo.cs"
-          sed -i "s/AssemblyVersion(\"$OLD_VERSION\")/AssemblyVersion(\"$NEW_VERSION\")/g" $FILE_PATH
-          sed -i "s/AssemblyFileVersion(\"$OLD_VERSION\")/AssemblyFileVersion(\"$NEW_VERSION\")/g" $FILE_PATH
+              # 기존 버전 추출
+              OLD_VERSION=$(grep 'AssemblyVersion' "$FILE_PATH" | cut -d '"' -f 2)
+              IFS='.' read -r -a V <<< "$OLD_VERSION"
+
+              # 버전 계산
+              if [[ "$MSG" == *"#major"* ]]; then
+                V[0]=$((V[0] + 1)); V[1]=0; V[2]=0; V[3]=0
+              elif [[ "$MSG" == *"#minor"* ]]; then
+                V[1]=$((V[1] + 1)); V[2]=0; V[3]=0
+              elif [[ "$MSG" == *"#build"* ]]; then
+                V[2]=$((V[2] + 1)); V[3]=0
+              else
+                V[3]=$((V[3] + 1))
+              fi
+
+              NEW_VERSION="${V[0]}.${V[1]}.${V[2]}.${V[3]}"
+              
+              # 파일 수정
+              sed -i "s/AssemblyVersion(\"$OLD_VERSION\")/AssemblyVersion(\"$NEW_VERSION\")/g" "$FILE_PATH"
+              sed -i "s/AssemblyFileVersion(\"$OLD_VERSION\")/AssemblyFileVersion(\"$NEW_VERSION\")/g" "$FILE_PATH"
+              
+              git add "$FILE_PATH"
+              echo "Updated $PROJECT to $NEW_VERSION"
+            fi
+          done
 
       - name: Commit and Push
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
-          git add .
-          git commit -m "[chore] Bump version to $NEW_VERSION"
-          git push
+          # 변경사항이 있을 때만 커밋
+          if ! git diff --staged --quiet; then
+            git commit -m "[chore] Auto-bump versions for modified projects"
+            git push
+          else
+            echo
