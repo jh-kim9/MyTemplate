@@ -1,0 +1,56 @@
+name: Auto Version Bump
+
+on:
+  pull_request:
+    branches:
+      - master
+    types: [closed]
+
+jobs:
+  bump-version:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Calculate New Version
+        id: versioning
+        run: |
+          # 1. 기존 버전 추출 (AssemblyInfo.cs에서)
+          FILE_PATH="./ALT_LumiPro/Properties/AssemblyInfo.cs"
+          OLD_VERSION=$(grep 'AssemblyVersion' $FILE_PATH | cut -d '"' -f 2)
+          IFS='.' read -r -a V <<< "$OLD_VERSION"
+          
+          # 2. 커밋 메시지에서 키워드 확인 (PR 제목이나 메시지 기준)
+          MSG="${{ github.event.pull_request.title }}"
+          
+          if [[ "$MSG" == *"#major"* ]]; then
+            V[0]=$((V[0] + 1)); V[1]=0; V[2]=0; V[3]=0
+          elif [[ "$MSG" == *"#minor"* ]]; then
+            V[1]=$((V[1] + 1)); V[2]=0; V[3]=0
+          elif [[ "$MSG" == *"#build"* ]]; then
+            V[2]=$((V[2] + 1)); V[3]=0
+          else
+            V[3]=$((V[3] + 1)) # 기본값은 수정 버전 증가
+          fi
+          
+          NEW_VERSION="${V[0]}.${V[1]}.${V[2]}.${V[3]}"
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          echo "OLD_VERSION=$OLD_VERSION" >> $GITHUB_ENV
+
+      - name: Update AssemblyInfo.cs
+        run: |
+          FILE_PATH="./ALT_LumiPro/Properties/AssemblyInfo.cs"
+          sed -i "s/AssemblyVersion(\"$OLD_VERSION\")/AssemblyVersion(\"$NEW_VERSION\")/g" $FILE_PATH
+          sed -i "s/AssemblyFileVersion(\"$OLD_VERSION\")/AssemblyFileVersion(\"$NEW_VERSION\")/g" $FILE_PATH
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add .
+          git commit -m "[chore] Bump version to $NEW_VERSION"
+          git push
