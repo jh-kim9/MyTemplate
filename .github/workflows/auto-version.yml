@@ -70,4 +70,6 @@ jobs:
             git commit -m "[chore] Auto-bump versions for modified projects"
             git push
           else
-            echo
+            echo "No version changes to commit."
+          fi
+          
