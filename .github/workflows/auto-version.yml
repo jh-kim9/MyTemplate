@@ -22,10 +22,13 @@ jobs:
           CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
           
           # *****************2. 업데이트할 프로젝트 목록 정의 (프로젝트 목록과 정확히 일치해야합니다!!!!!)**************************
-          PROJECTS=("A" "A.control")
+          PROJECTS=("Business" "Business.Control")
           
           # 2. PR 제목에서 버전업 자릿수 키워드 추출
           MSG="${{ github.event.pull_request.title }}"
+          
+          # 버전 변경 내역 누적 변수
+          VERSION_LOG=""
           
           for PROJECT in "${PROJECTS[@]}"; do
             # 해당 프로젝트 폴더 내에 변경사항이 있는지 확인
@@ -36,7 +39,7 @@ jobs:
               if [ ! -f "$FILE_PATH" ]; then continue; fi
 
               # 기존 버전 추출
-              OLD_VERSION=$(grep 'AssemblyVersion' "$FILE_PATH" | cut -d '"' -f 2)
+              OLD_VERSION=$(grep '\[assembly: AssemblyVersion' "$FILE_PATH" | cut -d '"' -f 2)
               IFS='.' read -r -a V <<< "$OLD_VERSION"
 
               # 버전 계산
@@ -58,8 +61,16 @@ jobs:
               
               git add "$FILE_PATH"
               echo "Updated $PROJECT to $NEW_VERSION"
+              
+              # 변경 내역 누적
+              VERSION_LOG="$VERSION_LOG\n- $PROJECT: $OLD_VERSION → $NEW_VERSION"
             fi
           done
+          
+          # 다음 step에서 사용할 수 있도록 환경변수로 저장
+          echo "VERSION_LOG<<EOF" >> $GITHUB_ENV
+          echo -e "$VERSION_LOG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
       - name: Commit and Push
         run: |
@@ -67,7 +78,7 @@ jobs:
           git config --global user.email "actions@github.com"
           # 변경사항이 있을 때만 커밋
           if ! git diff --staged --quiet; then
-            git commit -m "[chore] Auto-bump versions for modified projects"
+            git commit -m "[chore] Auto-bump versions${{ env.VERSION_LOG }}"
             git push
           else
             echo "No version changes to commit."
