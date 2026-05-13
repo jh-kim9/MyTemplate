@@ -1,4 +1,4 @@
-name: Multi-Project Version Bump
+name: Smart Multi-Project Version Bump
 
 on:
   pull_request:
@@ -22,7 +22,7 @@ jobs:
           CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
           
           # *****************2. 업데이트할 프로젝트 목록 정의 (프로젝트 목록과 정확히 일치해야합니다!!!!!)**************************
-          PROJECTS=("GitHubTest" "GitHubTest.Control")
+          PROJECTS=("ALT.Controller.Base" "ALT.Controller.Base.Control")
           
           # 2. PR 제목에서 버전업 자릿수 키워드 추출
           MSG="${{ github.event.pull_request.title }}"
