@@ -23,7 +23,7 @@ jobs:
           CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
           
           # *****************2. 업데이트할 프로젝트 목록 정의 (프로젝트 목록과 정확히 일치해야합니다!!!!!)**************************
-          PROJECTS=("ALT.Common" "ALT.Common.Control")
+          PROJECTS=("Business" "Business.Control")
           
           # 2. PR 제목에서 버전업 자릿수 키워드 추출
           MSG="${{ github.event.pull_request.title }}"
