@@ -3,7 +3,7 @@ name: Smart Multi-Project Version Bump
 on:
   pull_request:
     branches:
-      - master
+      - Develop
     types: [closed]
 
 jobs:
