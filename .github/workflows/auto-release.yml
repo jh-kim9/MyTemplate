@@ -10,6 +10,7 @@ jobs:
   create-release:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -19,65 +20,126 @@ jobs:
       - name: Create Releases per Project
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # *****************프로젝트 목록 정의 (auto-version.yml과 동일하게 맞춰주세요!!!!!)**************************
-          PROJECTS=("ALT.Controller.Base" "ALT.Controller.Base.Control")
 
-          for PROJECT in "${PROJECTS[@]}"; do
+        run: |
+
+          # ************************************************************
+          # 프로젝트 목록 정의
+          # auto-version.yml 과 동일하게 맞춰야 함
+          # ************************************************************
+          PROJECTS=(
+            "ALT.Controller.TDS"
+            "ALT.Controller.TDS.Control"
+          )
+
+          for PROJECT in "${PROJECTS[@]}"
+          do
+
+            echo "=================================================="
+            echo "PROJECT : $PROJECT"
+            echo "=================================================="
+
             FILE_PATH="./$PROJECT/Properties/AssemblyInfo.cs"
+
             if [ ! -f "$FILE_PATH" ]; then
-              echo "$PROJECT: AssemblyInfo.cs 없음, 스킵"
+              echo "AssemblyInfo.cs 없음 -> 스킵"
               continue
             fi
 
+            # ************************************************************
             # 버전 추출
+            # ************************************************************
             VERSION=$(grep '\[assembly: AssemblyVersion' "$FILE_PATH" | cut -d '"' -f 2)
+
+            if [ -z "$VERSION" ]; then
+              echo "버전 추출 실패"
+              continue
+            fi
+
+            echo "VERSION : $VERSION"
+
             TAG="${PROJECT}-v${VERSION}"
+
             RELEASE_NOTE_FILE="./$PROJECT/ReleaseNote.txt"
 
-            # 디버그 출력
-            echo ">>> 찾는 버전: [v${VERSION}]"
-            echo ">>> ReleaseNote 존재: $([ -f "$RELEASE_NOTE_FILE" ] && echo YES || echo NO)"
-            echo ">>> ReleaseNote 내용:"
-            cat "$RELEASE_NOTE_FILE"
+            echo "TAG : $TAG"
+            echo "RELEASE_NOTE_FILE : $RELEASE_NOTE_FILE"
 
-            # 동일 태그가 이미 존재하면 스킵 (중복 방지)
+            # ************************************************************
+            # 이미 태그 존재 시 스킵
+            # ************************************************************
             if git tag | grep -q "^${TAG}$"; then
-              echo "$TAG 이미 존재함, 스킵"
+              echo "이미 존재하는 태그 -> 스킵"
               continue
             fi
 
-            # ReleaseNote.txt에서 해당 버전 블록만 추출 (bash only)
+            # ************************************************************
+            # Release Note 추출
+            # 형식:
+            #
+            # [v2.5.0.0]
+            # 26.05.13
+            #   - 내용
+            # ============================
+            #
+            # ************************************************************
+            NOTES="릴리즈 노트 없음"
+
             if [ -f "$RELEASE_NOTE_FILE" ]; then
-              NOTES=""
-              CAPTURING=false
-              while IFS= read -r line; do
-                if [ "$line" = "[v${VERSION}]" ]; then
-                  CAPTURING=true
-                  continue
-                fi
-                if $CAPTURING; then
-                  if [[ "$line" =~ ^\[v ]]; then
-                    break
-                  fi
-                  NOTES="${NOTES}${line}"$'\n'
-                fi
-              done < "$RELEASE_NOTE_FILE"
-              NOTES=$(echo "$NOTES" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+              NOTES=$(awk -v ver="[v${VERSION}]" '
+
+                BEGIN {
+                  found=0
+                }
+
+                {
+                  # CRLF 대응
+                  gsub(/\r/, "")
+                }
+
+                # 버전 찾기
+                $0 == ver {
+                  found=1
+                  next
+                }
+
+                # 구분선 만나면 종료
+                found && /^=+$/ {
+                  exit
+                }
+
+                # 내용 저장
+                found {
+                  print
+                }
+
+              ' "$RELEASE_NOTE_FILE")
+
+              # 앞뒤 빈 줄 제거
+              NOTES=$(echo "$NOTES" | sed '/^[[:space:]]*$/d')
+
               if [ -z "$NOTES" ]; then
-                echo "$PROJECT: [v${VERSION}] 블록을 ReleaseNote.txt에서 찾지 못함"
                 NOTES="릴리즈 노트 없음"
               fi
+
             else
-              echo "$PROJECT: ReleaseNote.txt 없음"
-              NOTES="릴리즈 노트 없음"
+              echo "ReleaseNote.txt 없음"
             fi
 
+            echo "=================================================="
+            echo "RELEASE NOTES"
+            echo "=================================================="
+            echo "$NOTES"
+
+            # ************************************************************
             # GitHub Release 생성
+            # ************************************************************
             gh release create "$TAG" \
               --title "[$PROJECT] Release v${VERSION}" \
-              --notes "${NOTES}" \
+              --notes "$NOTES" \
               --latest=false
 
-            echo "$TAG 릴리즈 생성 완료"
+            echo "릴리즈 생성 완료"
+
           done
