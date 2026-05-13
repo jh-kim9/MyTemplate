@@ -21,7 +21,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # *****************프로젝트 목록 정의 (auto-version.yml과 동일하게 맞춰주세요!!!!!)**************************
-          PROJECTS=("GitHubTest" "GitHubTest.Control")
+          PROJECTS=("ALT.Controller.Base" "ALT.Controller.Base.Control")
 
           for PROJECT in "${PROJECTS[@]}"; do
             FILE_PATH="./$PROJECT/Properties/AssemblyInfo.cs"
@@ -33,7 +33,13 @@ jobs:
             # 버전 추출
             VERSION=$(grep '\[assembly: AssemblyVersion' "$FILE_PATH" | cut -d '"' -f 2)
             TAG="${PROJECT}-v${VERSION}"
-            echo "$PROJECT 버전: $VERSION, 태그: $TAG"
+            RELEASE_NOTE_FILE="./$PROJECT/ReleaseNote.txt"
+
+            # 디버그 출력
+            echo ">>> 찾는 버전: [v${VERSION}]"
+            echo ">>> ReleaseNote 존재: $([ -f "$RELEASE_NOTE_FILE" ] && echo YES || echo NO)"
+            echo ">>> ReleaseNote 내용:"
+            cat "$RELEASE_NOTE_FILE"
 
             # 동일 태그가 이미 존재하면 스킵 (중복 방지)
             if git tag | grep -q "^${TAG}$"; then
@@ -42,7 +48,6 @@ jobs:
             fi
 
             # ReleaseNote.txt에서 해당 버전 블록만 추출 (bash only)
-            RELEASE_NOTE_FILE="./$PROJECT/ReleaseNote.txt"
             if [ -f "$RELEASE_NOTE_FILE" ]; then
               NOTES=""
               CAPTURING=false
